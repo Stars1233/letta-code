@@ -217,6 +217,11 @@ export function getClientDefaultHeaders(): Record<string, string> {
   return {
     "X-Letta-Source": "letta-code",
     "User-Agent": `letta-code/${packageJson.version}`,
+    // Identify this device on user-message turns so the cloud can
+    // persist the (agent, conversation) → device association and
+    // restore it on other browsers/sessions. The cloud middleware
+    // ignores this header on non-message routes.
+    "X-Letta-Environment-Device-Id": settingsManager.getOrCreateDeviceId(),
     ...(nodeExperiment.source === "override"
       ? { "x-letta-node": nodeExperiment.enabled ? "1" : "0" }
       : nodeExperiment.enabled
