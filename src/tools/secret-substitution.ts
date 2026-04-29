@@ -1,6 +1,5 @@
 /**
- * Secret substitution for tool arguments.
- * Replaces $SECRET_NAME patterns with actual values from the secrets store.
+ * Secret handling for shell tool arguments and output.
  */
 
 import { loadSecrets } from "../utils/secretsStore";
@@ -12,21 +11,38 @@ import { loadSecrets } from "../utils/secretsStore";
 const SECRET_PATTERN = /\$([A-Z_][A-Z0-9_]*)/g;
 
 /**
- * Scan a command string for `$SECRET_NAME` references and build an env map
- * of matching secrets from the store. The shell will expand these vars
- * natively, so secret values never get injected into the command string.
+ * Scan a command string or command-argument array for `$SECRET_NAME`
+ * references and build an env map of matching secrets from the store.
+ * The shell will expand these vars natively, so secret values never get
+ * injected into the command string itself.
  */
 export function extractSecretEnvFromCommand(
-  command: string,
+  command: string | readonly string[],
+  agentId?: string,
 ): Record<string, string> {
-  const secrets = loadSecrets();
+  const secrets = loadSecrets(agentId);
   const env: Record<string, string> = {};
-  for (const match of command.matchAll(SECRET_PATTERN)) {
-    const name = match[1];
-    if (name !== undefined && secrets[name] !== undefined) {
-      env[name] = secrets[name];
+
+  const scan = (text: string) => {
+    for (const match of text.matchAll(SECRET_PATTERN)) {
+      const name = match[1];
+      if (name !== undefined && secrets[name] !== undefined) {
+        env[name] = secrets[name];
+      }
+    }
+  };
+
+  if (typeof command === "string") {
+    scan(command);
+    return env;
+  }
+
+  for (const part of command) {
+    if (typeof part === "string") {
+      scan(part);
     }
   }
+
   return env;
 }
 
@@ -35,8 +51,11 @@ export function extractSecretEnvFromCommand(
  * placeholder that makes it unambiguous to the LLM that the value is hidden.
  * Used to prevent secret values from leaking into agent context via tool output.
  */
-export function scrubSecretsFromString(input: string): string {
-  const secrets = loadSecrets();
+export function scrubSecretsFromString(
+  input: string,
+  agentId?: string,
+): string {
+  const secrets = loadSecrets(agentId);
   let result = input;
   // Replace longer values first to avoid partial matches
   const entries = Object.entries(secrets).sort(

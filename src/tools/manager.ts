@@ -1627,7 +1627,7 @@ export async function executeTool(
             ...enhancedArgs,
             onOutput: (chunk: string, stream: "stdout" | "stderr") => {
               options.onOutput?.(
-                stripAnsi(scrubSecretsFromString(chunk)),
+                stripAnsi(scrubSecretsFromString(chunk, scopedAgentId)),
                 stream,
               );
             },
@@ -1637,9 +1637,13 @@ export async function executeTool(
         // Inject secrets as environment variables instead of substituting into
         // the command string. This prevents shell metacharacters in secrets
         // (e.g. $$, backticks, quotes) from being interpreted by the shell.
-        const command =
-          typeof enhancedArgs.command === "string" ? enhancedArgs.command : "";
-        const secretEnv = extractSecretEnvFromCommand(command);
+        const command = enhancedArgs.command;
+        const secretEnv =
+          typeof command === "string" ||
+          (Array.isArray(command) &&
+            command.every((part) => typeof part === "string"))
+            ? extractSecretEnvFromCommand(command, scopedAgentId)
+            : {};
         if (Object.keys(secretEnv).length > 0) {
           enhancedArgs = { ...enhancedArgs, secretEnv };
         }
@@ -1733,7 +1737,7 @@ export async function executeTool(
       // don't leak into agent context or render as garbage in downstream UIs.
       if (STREAMING_SHELL_TOOLS.has(internalName)) {
         const sanitize = (text: string) =>
-          stripAnsi(scrubSecretsFromString(text));
+          stripAnsi(scrubSecretsFromString(text, scopedAgentId));
         if (typeof flattenedResponse === "string") {
           flattenedResponse = sanitize(flattenedResponse);
         } else if (Array.isArray(flattenedResponse)) {
